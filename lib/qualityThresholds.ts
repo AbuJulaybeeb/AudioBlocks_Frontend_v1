@@ -1,11 +1,13 @@
 /**
- * Feedback loop to improve quality check thresholds from admin overrides
- * (#448).
+ * Configurable quality thresholds per genre and feedback loop to improve quality
+ * check thresholds from admin overrides (#431, #448).
  *
- * Part of the AI Song Quality Filter (Mastra AI + NVIDIA): when the automated
- * verdict disagrees with what an admin ultimately decides, that disagreement
- * is evidence the thresholds are mis-tuned. This module records each admin
- * override and aggregates it into concrete threshold recommendations:
+ * Part of the AI Song Quality Filter (Mastra AI + NVIDIA):
+ * Different music genres possess distinct acoustic dynamics, production conventions,
+ * and baseline quality expectations (e.g. Classical requires high dynamic clarity,
+ * while Lofi accepts ambient noise and vintage distortion). This module provides
+ * configurable, genre-aware thresholds and aggregates admin overrides into concrete
+ * threshold adjustments per genre and platform-wide.
  *
  * - Admins frequently approve tracks the filter rejected → the confidence
  *   bar is too strict; recommend lowering it.
@@ -27,6 +29,8 @@ export interface AdminOverride {
   filterDecision: FilterDecision;
   /** What the admin decided instead. */
   adminAction: AdminAction;
+  /** Optional genre of the track. */
+  genre?: string;
 }
 
 export interface ThresholdFeedback {
@@ -52,9 +56,105 @@ export const THRESHOLD_STEP = 0.05;
 /** Share of overrides that must disagree before a threshold moves. */
 export const REVERSAL_SHARE = 0.3;
 
+/** Default quality thresholds mapped by normalized genre name. */
+export const DEFAULT_GENRE_THRESHOLDS: Readonly<Record<string, number>> = {
+  classical: 0.85,
+  jazz: 0.8,
+  acoustic: 0.78,
+  electronic: 0.75,
+  rnb: 0.72,
+  pop: 0.7,
+  rock: 0.7,
+  'hip hop': 0.7,
+  metal: 0.68,
+  ambient: 0.65,
+  lofi: 0.6,
+  default: BASE_MIN_CONFIDENCE_SCORE,
+};
+
 const MAX_OVERRIDES = 1000;
 
 const overrides: AdminOverride[] = [];
+const genreThresholds: Record<string, number> = { ...DEFAULT_GENRE_THRESHOLDS };
+
+/** Normalizes genre string to lowercase trimmed key. */
+export function normalizeGenreKey(genre?: string): string {
+  if (!genre || typeof genre !== 'string') return 'default';
+  const clean = genre.trim().toLowerCase();
+  return clean || 'default';
+}
+
+/**
+ * Returns the configurable quality threshold for a given genre.
+ * Falls back to default/baseline if genre is unset or unconfigured.
+ */
+export function getGenreThreshold(genre?: string): number {
+  const key = normalizeGenreKey(genre);
+  if (key in genreThresholds) {
+    return genreThresholds[key];
+  }
+  return genreThresholds.default ?? BASE_MIN_CONFIDENCE_SCORE;
+}
+
+/**
+ * Sets or overrides the quality threshold for a specific genre.
+ * The value is clamped to [0, 1] and rounded to THRESHOLD_STEP.
+ */
+export function setGenreThreshold(genre: string, threshold: number): void {
+  const key = normalizeGenreKey(genre);
+  const clamped = Math.min(
+    1,
+    Math.max(0, Number.isFinite(threshold) ? threshold : BASE_MIN_CONFIDENCE_SCORE)
+  );
+  genreThresholds[key] = roundToStep(clamped);
+}
+
+/**
+ * Batch updates genre thresholds.
+ */
+export function setGenreThresholds(thresholds: Record<string, number>): void {
+  if (!thresholds || typeof thresholds !== 'object') return;
+  for (const [g, t] of Object.entries(thresholds)) {
+    if (typeof t === 'number') {
+      setGenreThreshold(g, t);
+    }
+  }
+}
+
+/**
+ * Returns all currently configured genre thresholds.
+ */
+export function getGenreThresholds(): Record<string, number> {
+  return { ...genreThresholds };
+}
+
+/**
+ * Resets all genre thresholds back to defaults.
+ */
+export function resetGenreThresholds(): void {
+  for (const k of Object.keys(genreThresholds)) {
+    delete genreThresholds[k];
+  }
+  Object.assign(genreThresholds, DEFAULT_GENRE_THRESHOLDS);
+}
+
+/**
+ * Evaluates whether a raw score (0–100 or 0–1) meets the genre threshold.
+ */
+export function evaluateQualityScoreAgainstGenre(
+  score: number,
+  genre?: string
+): { passed: boolean; requiredThreshold: number; scoreNormalized: number; genre: string } {
+  const normScore = score > 1 ? score / 100 : score;
+  const threshold = getGenreThreshold(genre);
+  const normalizedGenre = genre && genre.trim() ? genre.trim() : 'Default';
+  return {
+    passed: normScore >= threshold,
+    requiredThreshold: threshold,
+    scoreNormalized: normScore,
+    genre: normalizedGenre,
+  };
+}
 
 /** Record one admin override for the feedback loop. */
 export function recordAdminOverride(override: AdminOverride): void {
@@ -66,14 +166,19 @@ export function recordAdminOverride(override: AdminOverride): void {
 
 /**
  * Aggregate the recorded overrides into a threshold recommendation.
- * The suggestion is always rounded to the step so it stays legible.
+ * Optionally filtered by genre to tune specific genre bars.
  */
-export function getThresholdFeedback(): ThresholdFeedback {
+export function getThresholdFeedback(genre?: string): ThresholdFeedback {
+  const targetKey = genre ? normalizeGenreKey(genre) : undefined;
+  const filteredOverrides = targetKey
+    ? overrides.filter((o) => normalizeGenreKey(o.genre) === targetKey)
+    : overrides;
+
   let approvalReversals = 0;
   let rejectionReversals = 0;
   let timeoutSkips = 0;
 
-  for (const override of overrides) {
+  for (const override of filteredOverrides) {
     if (override.filterDecision === 'timeout' && override.adminAction === 'skipped') {
       timeoutSkips += 1;
       continue;
@@ -85,24 +190,29 @@ export function getThresholdFeedback(): ThresholdFeedback {
     }
   }
 
-  let suggestedMinConfidenceScore = BASE_MIN_CONFIDENCE_SCORE;
-  let recommendation = 'Admin overrides agree with the filter — keep the current threshold.';
+  const baseThreshold = genre ? getGenreThreshold(genre) : BASE_MIN_CONFIDENCE_SCORE;
+  let suggestedMinConfidenceScore = baseThreshold;
+  let recommendation = genre
+    ? `Admin overrides agree with the filter for genre "${genre}" — keep the current threshold.`
+    : 'Admin overrides agree with the filter — keep the current threshold.';
 
   const disagreements = approvalReversals + rejectionReversals;
-  if (overrides.length > 0 && disagreements / overrides.length >= REVERSAL_SHARE) {
+  if (filteredOverrides.length > 0 && disagreements / filteredOverrides.length >= REVERSAL_SHARE) {
     if (approvalReversals > rejectionReversals) {
-      suggestedMinConfidenceScore = roundToStep(BASE_MIN_CONFIDENCE_SCORE - THRESHOLD_STEP);
-      recommendation =
-        'Admins frequently approve tracks the filter rejects — lower minConfidenceScore.';
+      suggestedMinConfidenceScore = roundToStep(Math.max(0, baseThreshold - THRESHOLD_STEP));
+      recommendation = genre
+        ? `Admins frequently approve "${genre}" tracks the filter rejects — lower minConfidenceScore.`
+        : 'Admins frequently approve tracks the filter rejects — lower minConfidenceScore.';
     } else {
-      suggestedMinConfidenceScore = roundToStep(BASE_MIN_CONFIDENCE_SCORE + THRESHOLD_STEP);
-      recommendation =
-        'Admins frequently reject tracks the filter approves — raise minConfidenceScore.';
+      suggestedMinConfidenceScore = roundToStep(Math.min(1, baseThreshold + THRESHOLD_STEP));
+      recommendation = genre
+        ? `Admins frequently reject "${genre}" tracks the filter approves — raise minConfidenceScore.`
+        : 'Admins frequently reject tracks the filter approves — raise minConfidenceScore.';
     }
   }
 
   return {
-    overridesRecorded: overrides.length,
+    overridesRecorded: filteredOverrides.length,
     approvalReversals,
     rejectionReversals,
     timeoutSkips,
@@ -111,9 +221,10 @@ export function getThresholdFeedback(): ThresholdFeedback {
   };
 }
 
-/** Clear the feedback store (test use only). */
+/** Clear the feedback store and reset genre thresholds (test use only). */
 export function resetThresholdFeedback(): void {
   overrides.length = 0;
+  resetGenreThresholds();
 }
 
 function roundToStep(value: number): number {
