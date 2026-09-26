@@ -24,12 +24,14 @@ import {
   type SongQualityOptions,
 } from './songQualityFilter';
 import { analyzeStemUpload, type StemUploadAnalysis, type AudioStem } from './stemAnalysis';
-import {
-  getGenreThreshold,
-  evaluateQualityScoreAgainstGenre,
-} from './qualityThresholds';
+import { getGenreThreshold, evaluateQualityScoreAgainstGenre } from './qualityThresholds';
 import { recordQualityCheckResult } from './qualityAnalytics';
 import { AnalysisQueueMonitor } from './analysisQueueMonitor';
+import { detectExplicitContent, type ExplicitDetectionResult } from './explicitContentDetection';
+import {
+  analyzeLoudnessAndSuggest,
+  type LoudnessNormalizationSuggestion,
+} from './loudnessNormalization';
 
 export type PipelineVerdict = 'approved' | 'review' | 'rejected' | 'skipped';
 
@@ -45,6 +47,8 @@ export interface UploadQualityPipelineInput {
   spectralFeatures?: number[];
   stems?: AudioStem[];
   subject?: QualityCheckSubject | null;
+  integratedLufs?: number;
+  truePeakDbtp?: number;
 }
 
 export interface UploadQualityPipelineOptions {
@@ -67,6 +71,8 @@ export interface UploadQualityPipelineResult {
   plagiarismCheck?: PlagiarismCheckResult;
   assessment?: SongQualityAssessment;
   stemAnalysis?: StemUploadAnalysis;
+  explicitCheck?: ExplicitDetectionResult;
+  loudnessSuggestion?: LoudnessNormalizationSuggestion;
   reasons: string[];
   processedAt: number;
 }
@@ -82,6 +88,24 @@ export async function processUploadQualityCheck(
   const genre = input.genre ? input.genre.trim() : 'Default';
   const genreThreshold = getGenreThreshold(genre);
   const queueMonitor = options.queueMonitor;
+
+  // Compute explicit content detection and loudness normalization suggestions
+  const explicitCheck = detectExplicitContent({
+    trackId: input.trackId,
+    title: input.title,
+    lyrics: input.lyrics,
+    artist: input.artist,
+    genre: input.genre,
+  });
+
+  const loudnessSuggestion = analyzeLoudnessAndSuggest({
+    trackId: input.trackId,
+    integratedLufs: input.integratedLufs,
+    truePeakDbtp: input.truePeakDbtp,
+    spectralFeatures: input.spectralFeatures,
+    audioBuffer: input.audioBuffer,
+    durationSeconds: input.durationSeconds,
+  });
 
   // 1. Check for role-based / admin-approved exemption
   if (canSkipQualityCheck(input.subject)) {
@@ -100,6 +124,8 @@ export async function processUploadQualityCheck(
       genreThreshold,
       passedGenreThreshold: true,
       exempt: true,
+      explicitCheck,
+      loudnessSuggestion,
       reasons: ['Quality check bypassed for exempt/admin-approved artist.'],
       processedAt,
     };
@@ -136,9 +162,9 @@ export async function processUploadQualityCheck(
         passedGenreThreshold: false,
         exempt: false,
         plagiarismCheck: plagiarismResult,
-        reasons: [
-          `Rejected by plagiarism detector: ${plagiarismResult.reasons.join(' ')}`,
-        ],
+        explicitCheck,
+        loudnessSuggestion,
+        reasons: [`Rejected by plagiarism detector: ${plagiarismResult.reasons.join(' ')}`],
         processedAt,
       };
     }
@@ -223,6 +249,8 @@ export async function processUploadQualityCheck(
       passedGenreThreshold: false,
       exempt: false,
       plagiarismCheck: plagiarismResult,
+      explicitCheck,
+      loudnessSuggestion,
       reasons: [`Analysis error (${errorMsg}); sent to manual review queue.`],
       processedAt,
     };
@@ -263,7 +291,8 @@ export async function processUploadQualityCheck(
   // 6. Record analytics & complete queue job
   recordQualityCheckResult({
     trackId: input.trackId,
-    outcome: finalStatus === 'approved' ? 'passed' : finalStatus === 'rejected' ? 'failed' : 'failed',
+    outcome:
+      finalStatus === 'approved' ? 'passed' : finalStatus === 'rejected' ? 'failed' : 'failed',
     score: rawScore / 100,
     recordedAt: processedAt,
   });
@@ -297,6 +326,8 @@ export async function processUploadQualityCheck(
     plagiarismCheck: plagiarismResult,
     assessment,
     stemAnalysis,
+    explicitCheck,
+    loudnessSuggestion,
     reasons,
     processedAt,
   };

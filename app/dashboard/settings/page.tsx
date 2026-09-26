@@ -2,7 +2,9 @@
 
 import { useUserPreferences } from '@/context/UserPreferencesContext';
 import type { AudioQuality } from '@/context/UserPreferencesContext';
+import AccountLinkingUI from '@/components/auth/AccountLinkingUI';
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
+import Link from 'next/link';
 import { Mail, Wallet, Trash2 } from 'lucide-react';
 
 function LinkedAccountsList() {
@@ -13,7 +15,10 @@ function LinkedAccountsList() {
   return (
     <>
       {linkedWallets.map((wallet) => (
-        <div key={wallet.id} className="flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-[#1E1E1E]">
+        <div
+          key={wallet.id}
+          className="flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-[#1E1E1E]"
+        >
           <div className="flex items-center gap-3">
             <Wallet className="h-5 w-5 text-gray-400" />
             <div>
@@ -33,7 +38,10 @@ function LinkedAccountsList() {
         </div>
       ))}
       {linkedEmails.map((emailCred) => (
-        <div key={emailCred.id} className="flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-[#1E1E1E]">
+        <div
+          key={emailCred.id}
+          className="flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-[#1E1E1E]"
+        >
           <div className="flex items-center gap-3">
             <Mail className="h-5 w-5 text-gray-400" />
             <div>
@@ -71,7 +79,7 @@ export default function SettingsPage() {
           Manage the wallets and identities connected to your account.
         </p>
         <div className="space-y-4">
-          {/* We'll render linked accounts dynamically here */}
+          <AccountLinkingUI />
           <LinkedAccountsList />
         </div>
       </section>
@@ -141,9 +149,7 @@ export default function SettingsPage() {
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 preferences.showExplicitContent ? 'bg-[#D2045B]' : 'bg-gray-600'
               }`}
-              onClick={() =>
-                setPreference('showExplicitContent', !preferences.showExplicitContent)
-              }
+              onClick={() => setPreference('showExplicitContent', !preferences.showExplicitContent)}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -182,6 +188,27 @@ export default function SettingsPage() {
               />
             </button>
           </div>
+
+          <div className="flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-[#1E1E1E]">
+            <div>
+              <div className="font-medium text-white flex items-center gap-2">
+                Tune Platform Quality Thresholds
+                <span className="rounded-full bg-[#D2045B]/15 px-2 py-0.5 text-[10px] font-semibold text-[#D2045B] border border-[#D2045B]/30">
+                  Admin
+                </span>
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                Configure minimum confidence scores per genre and review adaptive moderation
+                feedback.
+              </div>
+            </div>
+            <Link
+              href="/dashboard/settings/quality"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-[#D2045B] hover:bg-[#b0034c] rounded-lg transition-colors shrink-0"
+            >
+              Tune Thresholds
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -200,9 +227,7 @@ export default function SettingsPage() {
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 preferences.emailNotifications ? 'bg-[#D2045B]' : 'bg-gray-600'
               }`}
-              onClick={() =>
-                setPreference('emailNotifications', !preferences.emailNotifications)
-              }
+              onClick={() => setPreference('emailNotifications', !preferences.emailNotifications)}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -215,18 +240,14 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-700 bg-[#1E1E1E]">
             <div>
               <div className="font-medium text-white">In-App Notifications</div>
-              <div className="text-xs text-gray-400 mt-1">
-                Show notifications within the app
-              </div>
+              <div className="text-xs text-gray-400 mt-1">Show notifications within the app</div>
             </div>
             <button
               aria-label={`In-app notifications are ${preferences.inAppNotifications ? 'on' : 'off'}`}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 preferences.inAppNotifications ? 'bg-[#D2045B]' : 'bg-gray-600'
               }`}
-              onClick={() =>
-                setPreference('inAppNotifications', !preferences.inAppNotifications)
-              }
+              onClick={() => setPreference('inAppNotifications', !preferences.inAppNotifications)}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
