@@ -10,6 +10,7 @@ import Cookies from 'js-cookie';
 import { ArrowRight, Folder, LogOut, Menu, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import ConnectWalletPrompt from '@/components/auth/ConnectWalletPrompt';
+import { SocialLoginButtons } from '@/components/auth/SocialLoginButtons';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { SearchOverlay } from '@/components/ui/SearchOverlay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -39,9 +40,8 @@ const Navbar = () => {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   // Auth() mounts the signature flow and the #476 role-selection listener for
-  // every public page; nothing is destructured because the prompt now owns the
-  // sign-in trigger UI.
-  Auth();
+  // every public page; destructure setShouldTriggerSignature for social login buttons.
+  const { setShouldTriggerSignature } = Auth();
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileCloseRef = useRef<HTMLButtonElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
