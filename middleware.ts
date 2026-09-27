@@ -35,16 +35,26 @@ export default function middleware(req: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   if (!isProtected) return NextResponse.next();
 
-  // #277 — read the HttpOnly session cookie, not `audioblocks_jwt` (which
-  // must stay JS-readable for apiClient.ts's Bearer-header use case and is
-  // therefore forgeable/readable by an XSS payload). See
-  // app/api/session/route.ts for how this cookie is set.
-  const tokenCookie = req.cookies.get(AUTH.SESSION_COOKIE_NAME);
-  const isAuthenticated = tokenCookie && !isExpiredJwt(tokenCookie.value);
+  // #277, #470 — read HttpOnly session cookie, fallback to client JWT cookie,
+  // or Privy authentication cookies.
+  const sessionCookie = req.cookies.get(AUTH.SESSION_COOKIE_NAME);
+  const jwtCookie = req.cookies.get(AUTH.COOKIE_NAME);
+  const privyCookie =
+    req.cookies.get('privy-token') ||
+    req.cookies.get('privy-id-token') ||
+    req.cookies.get('privy-session');
+
+  const hasValidSession = !!(sessionCookie && !isExpiredJwt(sessionCookie.value));
+  const hasValidJwt = !!(jwtCookie && !isExpiredJwt(jwtCookie.value));
+  const hasPrivyAuth = !!privyCookie;
+
+  const isAuthenticated = hasValidSession || hasValidJwt || hasPrivyAuth;
 
   if (!isAuthenticated) {
     const loginUrl = new URL(LOGIN_PATH, req.url);
-    loginUrl.searchParams.set('returnTo', pathname);
+    const returnTarget = `${pathname}${req.nextUrl.search || ''}`;
+    loginUrl.searchParams.set('returnTo', returnTarget);
+    loginUrl.searchParams.set('auth', 'login');
     return NextResponse.redirect(loginUrl);
   }
 

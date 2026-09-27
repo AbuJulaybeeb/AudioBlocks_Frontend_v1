@@ -14,6 +14,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { SearchOverlay } from '@/components/ui/SearchOverlay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Auth } from '@/hooks/useAuth';
+import { useLogout } from '@/hooks/useLogout';
 
 /**
  * True if the visitor has no injected EVM wallet extension at all
@@ -81,10 +82,55 @@ const Navbar = () => {
   }, []);
 
   const { setShowDynamicUserProfile, user } = useDynamicContext();
+  const { logout } = useLogout();
 
   // #476 — open the differentiated listener/artist connect-wallet prompt
   // instead of dropping every visitor into the same Dynamic auth flow.
   const [isWalletPromptOpen, setIsWalletPromptOpen] = useState(false);
+
+  // #470 — If an unauthenticated visitor was redirected to login with returnTo, auto-open the prompt
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !user?.userId) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('returnTo') || params.get('auth') === 'login') {
+        setIsWalletPromptOpen(true);
+      }
+    }
+  }, [user?.userId, pathname]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const inDesktopMenu = userMenuRef.current?.contains(target) ?? false;
+      const inMobileMenu = mobileUserMenuRef.current?.contains(target) ?? false;
+      if (!inDesktopMenu && !inMobileMenu) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    setIsUserMenuOpen(false);
+  }, [pathname]);
+
+  const avatarInitial = (user?.email?.[0] ?? 'A').toUpperCase();
+
+  const logOut = async () => {
+    setIsUserMenuOpen(false);
+    setIsMenuOpen(false);
+    await logout({ redirectTo: '/' });
+  };
 
   const handleAuthentication = async () => {
     if (!hasInjectedWallet()) {
@@ -179,14 +225,14 @@ const Navbar = () => {
             <>
               <SocialLoginButtons onLoginStart={() => setShouldTriggerSignature(true)} />
               <button
-              className="px-4 cursor-pointer py-2 gap-3 rounded-full bg-[#D2045B] hover:bg-[#B8043F] flex justify-between items-center text-white font-bold transition-all duration-200 whitespace-nowrap text-sm hover:scale-105 shadow-lg hover:shadow-xl"
-              onClick={handleAuthentication}
-            >
-              Sign in
-              <div className="bg-black rounded-full p-1">
-                <ArrowRight className="h-4 w-4 rotate-[300deg]" />
-              </div>
-            </button>
+                className="px-4 cursor-pointer py-2 gap-3 rounded-full bg-[#D2045B] hover:bg-[#B8043F] flex justify-between items-center text-white font-bold transition-all duration-200 whitespace-nowrap text-sm hover:scale-105 shadow-lg hover:shadow-xl"
+                onClick={handleAuthentication}
+              >
+                Sign in
+                <div className="bg-black rounded-full p-1">
+                  <ArrowRight className="h-4 w-4 rotate-[300deg]" />
+                </div>
+              </button>
             </>
           ) : (
             <div ref={userMenuRef} className="relative">

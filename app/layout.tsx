@@ -10,6 +10,7 @@ import EnvCheck from '@/components/EnvCheck';
 import SWRegister from '@/components/SWRegister';
 import { ThemeScript } from '@/components/ThemeScript';
 import RouteProgress from '@/components/ui/RouteProgress';
+import PrivyAuthProvider from '@/context/PrivyAuthProvider';
 import Provider from '@/context/provider';
 import type { Metadata } from 'next';
 const geistSans = Geist({
@@ -46,28 +47,30 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <Provider>
-          <Suspense fallback={null}>
-            <RouteProgress />
-          </Suspense>
-          <SWRegister />
-          <EnvCheck />
-          <AccessibilityAnnouncer />
-          <a
-            className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-9999 focus:bg-white focus:text-black focus:px-4 focus:py-2 focus:rounded focus:font-semibold"
-            href="#main-content"
-          >
-            Skip to main content
-          </a>
-          <Toaster closeButton position="bottom-right" />
-          {children}
-          {/* Analytics script loaded after user interaction to reduce main thread blocking */}
-          <Script
-            id="analytics-script"
-            src="https://www.google-analytics.com/analytics.js"
-            strategy="lazyOnload"
-          />
-        </Provider>
+        <PrivyAuthProvider>
+          <Provider>
+            <Suspense fallback={null}>
+              <RouteProgress />
+            </Suspense>
+            <SWRegister />
+            <EnvCheck />
+            <AccessibilityAnnouncer />
+            <a
+              className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-9999 focus:bg-white focus:text-black focus:px-4 focus:py-2 focus:rounded focus:font-semibold"
+              href="#main-content"
+            >
+              Skip to main content
+            </a>
+            <Toaster closeButton position="bottom-right" />
+            {children}
+            {/* Analytics script loaded after user interaction to reduce main thread blocking */}
+            <Script
+              id="analytics-script"
+              src="https://www.google-analytics.com/analytics.js"
+              strategy="lazyOnload"
+            />
+          </Provider>
+        </PrivyAuthProvider>
       </body>
     </html>
   );

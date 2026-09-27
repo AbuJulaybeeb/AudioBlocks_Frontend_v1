@@ -21,10 +21,10 @@ its app id at runtime from the environment.
 
 ### Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NEXT_PUBLIC_PRIVY_APP_ID` | yes (when Privy is enabled) | App id from the [Privy dashboard](https://dashboard.privy.io) |
-| `NEXT_PUBLIC_USE_PRIVY_AUTH` | no (default `false`) | Feature flag — when `true`, the app uses Privy for authentication instead of Dynamic |
+| Variable                     | Required                    | Description                                                                          |
+| ---------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_PRIVY_APP_ID`   | yes (when Privy is enabled) | App id from the [Privy dashboard](https://dashboard.privy.io)                        |
+| `NEXT_PUBLIC_USE_PRIVY_AUTH` | no (default `false`)        | Feature flag — when `true`, the app uses Privy for authentication instead of Dynamic |
 
 Add both to `.env.local` (see `.env.example` for placeholders):
 
@@ -57,3 +57,53 @@ export function LoginButton() {
   return <button onClick={login}>Sign in</button>;
 }
 ```
+
+### Logout Functionality (#468)
+
+Use `useLogout` to coordinate session termination across Privy, Dynamic, wagmi, cookies, and backend sessions:
+
+```tsx
+'use client';
+
+import { useLogout } from '@/hooks/useLogout';
+
+export function SignOutButton() {
+  const { logout, isLoggingOut } = useLogout();
+  return (
+    <button onClick={() => logout({ redirectTo: '/' })} disabled={isLoggingOut}>
+      Sign out
+    </button>
+  );
+}
+```
+
+### Route Gating & Redirect-to-Login (#470)
+
+Unauthenticated visitors attempting to access protected routes (`/dashboard`, `/profile`, `/onboarding`) are automatically redirected to login with their intended destination preserved in the `returnTo` query parameter.
+
+- **Server-Side (`middleware.ts`)**: Checks HttpOnly session cookies, fallback JWT cookies, and Privy authentication tokens (`privy-token`, `privy-id-token`, `privy-session`). Unauthenticated requests are redirected to `/?returnTo=<path>&auth=login`.
+- **Client-Side Guard (`<AuthGuard>`)**:
+
+  ```tsx
+  import { AuthGuard } from '@/components/auth/AuthGuard';
+
+  export default function ProtectedFeature() {
+    return (
+      <AuthGuard fallback={<div>Authenticating...</div>}>
+        <DashboardView />
+      </AuthGuard>
+    );
+  }
+  ```
+
+- **Client-Side Hook (`useRequireAuth`)**:
+
+  ```tsx
+  import { useRequireAuth } from '@/hooks/useRequireAuth';
+
+  export function SecretComponent() {
+    const { isAuthenticated, isLoading } = useRequireAuth({ returnTo: '/dashboard/secret' });
+    if (isLoading || !isAuthenticated) return null;
+    return <div>Protected</div>;
+  }
+  ```
