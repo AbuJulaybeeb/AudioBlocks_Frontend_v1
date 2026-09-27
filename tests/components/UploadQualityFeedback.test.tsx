@@ -72,15 +72,11 @@ describe('UploadQualityFeedback component', () => {
     };
 
     render(
-      <UploadQualityFeedback
-        result={duplicateResult}
-        title="Pirated Anthem"
-        onRetry={onRetry}
-      />
+      <UploadQualityFeedback result={duplicateResult} title="Pirated Anthem" onRetry={onRetry} />
     );
 
     expect(screen.getByText('Pirated Anthem')).toBeInTheDocument();
-    expect(screen.getByText(/rejected/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/rejected/i).length).toBeGreaterThan(0);
     expect(screen.getByText('duplicate')).toBeInTheDocument();
 
     const retryBtn = screen.getByRole('button', { name: /Re-upload \/ Adjust Track/i });

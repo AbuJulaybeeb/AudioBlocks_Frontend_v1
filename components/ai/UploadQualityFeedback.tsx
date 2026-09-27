@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   Music2,
   Info,
+  Volume2,
 } from 'lucide-react';
 import QualityBadge from './QualityBadge';
 import { cn } from '@/lib/utils';
@@ -171,6 +172,77 @@ export default function UploadQualityFeedback({
                 : '100% Original acoustic audio'}
           </p>
         </div>
+
+        {/* Explicit Content Advisory Card */}
+        {result.explicitCheck && (
+          <div
+            data-testid="explicit-advisory-card"
+            className="rounded-xl border border-border/50 bg-background/50 p-4 space-y-1"
+          >
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Explicit Content</span>
+              <ShieldAlert
+                size={14}
+                className={result.explicitCheck.isExplicit ? 'text-amber-400' : 'text-emerald-400'}
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-0.5">
+              <span
+                className={cn(
+                  'rounded px-2 py-0.5 text-xs font-black uppercase tracking-wider',
+                  result.explicitCheck.isExplicit
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                )}
+              >
+                {result.explicitCheck.isExplicit ? 'EXPLICIT [E]' : 'CLEAN'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">
+              {result.explicitCheck.isExplicit
+                ? result.explicitCheck.flaggedTerms.join(', ') || 'Explicit themes flagged'
+                : 'Radio friendly audio & lyrics'}
+            </p>
+          </div>
+        )}
+
+        {/* Loudness Normalization Suggestion Card */}
+        {result.loudnessSuggestion && (
+          <div
+            data-testid="loudness-suggestion-card"
+            className="rounded-xl border border-border/50 bg-background/50 p-4 space-y-1"
+          >
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Loudness Normalization</span>
+              <Volume2 size={14} className="text-primary" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <p className="text-lg font-bold text-foreground">
+                {result.loudnessSuggestion.measuredLufs}{' '}
+                <span className="text-xs font-normal text-muted-foreground">LUFS</span>
+              </p>
+              <span
+                className={cn(
+                  'text-xs font-semibold',
+                  result.loudnessSuggestion.suggestedGainDb > 0
+                    ? 'text-emerald-400'
+                    : result.loudnessSuggestion.suggestedGainDb < 0
+                      ? 'text-amber-400'
+                      : 'text-muted-foreground'
+                )}
+              >
+                {result.loudnessSuggestion.suggestedGainDb > 0
+                  ? `+${result.loudnessSuggestion.suggestedGainDb}`
+                  : result.loudnessSuggestion.suggestedGainDb}{' '}
+                dB
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">
+              Target: {result.loudnessSuggestion.targetLufs} LUFS (
+              {result.loudnessSuggestion.status.replace('_', ' ')})
+            </p>
+          </div>
+        )}
       </div>
 
       {/* AI Reasons & Feedback Breakdown */}
